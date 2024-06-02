@@ -9,7 +9,7 @@
     "astro-templater": "./dist/main.js"
   },
   "scripts": {
-    "build": "tsc -p tsconfig.build.json",
+    "build": "rimraf dist && tsc -p tsconfig.build.json",
     "start": "node ./main.js"
   },
   "keywords": [],
