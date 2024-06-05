@@ -35,6 +35,24 @@ pnpm build
 
 ### 빠른 시작
 
+npm 저장소에 등록하지 않은 관계로, CLI 패키지를 다음과 같이 등록하여 사용하실 수 있습니다.
+
+```sh
+cd /프로젝트/경로/ #(모노레포 전체)
+
+# 빌드
+pnpm install
+pnpm build
+
+# CLI 글로벌 링크
+cd ./packages/cli/
+pnpm link -g
+
+# 사용
+cd /사용하려는/경로/
+astro-templater ...
+```
+
 ```sh
 # 1.
 # 다음 두 경로에서 모두 사용 가능합니다 :)
