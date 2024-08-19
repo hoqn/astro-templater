@@ -1,4 +1,4 @@
-#!/usr/bin/env node
+#!/usr/bin/env node --no-warnings=ExperimentalWarning
 
 import { findCollectionDir, generateFrontmatter, logger, parseFrontmatterSchema } from "@astro-templater/core";
 import { program } from "commander";
@@ -6,10 +6,10 @@ import inquirer from "inquirer";
 import fs from "node:fs";
 import { EOL } from "node:os";
 import path from "node:path";
-import { z } from "zod";
+import { z, ZodFirstPartyTypeKind } from "zod";
 import packageJson from "../package.json" assert { type: "json" };
 import { loader } from "./loader.js";
-import { getZodDefault } from "./utils.js";
+import { parseZodType } from "./parse-def.js";
 
 const __cwd = process.cwd();
 
@@ -71,7 +71,7 @@ program
       fileName = await inquirer
         .prompt({
           name: "filename",
-          message: "file name(required): ",
+          message: "*file name (string): ",
           type: "input",
           validate(input) {
             return !!input || "This field is required";
@@ -90,35 +90,84 @@ program
       Object.entries(schema.shape).map((it) => {
         const [name, attrDef] = it as [string, z.AnyZodObject];
 
+        const { typeName, defaultValue, optional, nullable } = parseZodType(attrDef);
+
         // TODO: Zod 자체적으로 required 구분할 수 있도록 (+ validator에 통합)
-        const required = !(attrDef instanceof z.ZodNullable || attrDef instanceof z.ZodOptional);
+        const required = !optional && !nullable;
 
-        let defaultValue = getZodDefault(attrDef);
+        const [inquirerType, inquirerValidator] = (() => {
+          switch (typeName) {
+            case z.ZodFirstPartyTypeKind.ZodBoolean:
+              return ["checkbox", (input: any) => z.boolean().safeParse(input).success || "must be a boolean"];
+            case z.ZodFirstPartyTypeKind.ZodArray:
+              return ["rawlist", (input: any) => z.array(z.any()).safeParse(input).success || "must be an array"];
+            case z.ZodFirstPartyTypeKind.ZodDate:
+              return ["input"];
+            case z.ZodFirstPartyTypeKind.ZodString:
+              return ["input"];
+            default:
+              return ["input"];
+          }
+        })();
 
-        // Date -> ISO8601
-        if (defaultValue && defaultValue instanceof Date) {
-          defaultValue = defaultValue.toISOString();
-        }
+        const attrType = (() => {
+          switch (typeName) {
+            case ZodFirstPartyTypeKind.ZodBoolean:
+              return "boolean";
+            case ZodFirstPartyTypeKind.ZodDate:
+              return "date";
+            case ZodFirstPartyTypeKind.ZodArray:
+              return "array";
+            default:
+              return typeName.slice(3).toLowerCase();
+          }
+        })();
 
         return {
           name,
-          message: `${name}${required ? "(required): " : ": "}`,
+          message: `${required ? "*" : " "}${name}(${attrType}): `,
 
           // TODO: Zod parsing과 연계하여 띄우기
           default: defaultValue,
 
           // TODO: Date와 같은 데이터타입에 따라 변화
-          type: "input",
+          type: inquirerType,
 
           // TODO: 각 데이터타입마다 알맞은 validator 설정
           validate(input) {
-            if (required && !input) return "This field is required!";
+            if (!required && !input) {
+              return true;
+            }
+
+            if (required && !input && defaultValue === undefined) {
+              return "This field is required!";
+            }
+
+            switch (attrType) {
+              case "date":
+                return z.date().safeParse(input).success || "This field must be a Date!";
+              case "boolean":
+                return z.boolean().safeParse(input).success || "This field must be a Boolean!";
+              case "array":
+                return z.array(z.any()).safeParse(input).success || "This field must be an Array!";
+            }
+
             return true;
           },
 
           // 빈 문자열 처리
           filter(input) {
-            return input || undefined;
+            if (!input) return undefined;
+
+            switch (attrType) {
+              // Astro에서 Date는 ISO8601 형식으로 받는다.
+              case "date":
+                return new Date(input) || undefined;
+              case "boolean":
+                return Boolean(input);
+              default:
+                return String(input);
+            }
           },
         };
       })
@@ -146,4 +195,12 @@ program
     );
   });
 
-program.parse();
+try {
+  program.parse();
+} catch (err) {
+  if (err instanceof Error) {
+    console.error(err.message);
+  } else {
+    throw err;
+  }
+}
