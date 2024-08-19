@@ -7,10 +7,8 @@ import type { CollectionConfig } from "astro:content";
 import { logger } from "./logger";
 
 export function findCollectionDir(searchPath: string): string {
-  const contentDir = fs.existsSync(path.join(searchPath, "src/content"))
-    ? path.join(searchPath, "src/content")
-    : searchPath;
-  
+  const contentDir = fs.existsSync(path.join(searchPath, "src/content")) ? path.join(searchPath, "src/content") : searchPath;
+
   return contentDir;
 }
 
@@ -49,7 +47,7 @@ export async function compileCollectionConfig(basePath: string, { isTypeScript, 
 
   // 번들러를 거치지 않아 Virtual URI (e.g. astro:content)를 해석할 수 없다.
   // 그래서 z는 zod에서 직접, defineCollection은 더미 함수로 대체한다.
-  const dummyLibs = "import { z } from 'zod';" + "const defineCollection = (o) => o;";
+  const dummyLibs = fs.readFileSync(path.join(__dirname, "assets/tmp-config-modules.mjs")).toString();
   // 기존 임포트 부분은 제거
   rawdata = rawdata.replace(/import\s+\{[^\}]*\}\s+from\s+['"]astro\:content['"]\s*;*/gi, "");
 
